@@ -28,9 +28,10 @@ async def stream_sse_response(
         logger.info(f"Processing query for user {user_id}: {query[:100]}...")
 
         top_k = settings.TOP_K_CHUNKS
-        results = ChromaDB.search(
+        results = ChromaDB.search_with_reranking(
             query_text=query,
-            n_results=top_k
+            n_results=top_k,
+            retrieve_count=15
         )
 
         if not results['documents'][0]:

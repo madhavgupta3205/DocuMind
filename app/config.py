@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 100
 
     TOP_K_CHUNKS: int = 5
-    RERANK_TOP_K: int = 3
+    RERANK_TOP_K: int = 5
 
     @property
     def origins_list(self) -> List[str]:
