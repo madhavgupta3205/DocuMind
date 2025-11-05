@@ -16,29 +16,54 @@ RAG-powered document query system with JWT authentication and semantic search.
 
 FastAPI • MongoDB • ChromaDB • Groq API • SentenceTransformers
 
-## Setup
+## Prerequisites
 
+- Python 3.9+
+- MongoDB (local or MongoDB Atlas)
+- Groq API key (free from https://console.groq.com)
+
+## Quick Start
+
+1. Clone and setup:
 ```bash
+git clone https://github.com/madhavgupta3205/DocuMind.git
+cd DocuMind
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+2. Configure environment:
+```bash
 cp .env.example .env
 ```
 
-Update `.env` with your credentials:
-```
+Edit `.env`:
+```env
 MONGODB_URL=mongodb://localhost:27017
-GROQ_API_KEY=your_key
-JWT_SECRET_KEY=your_secret
+GROQ_API_KEY=your_groq_api_key_here
+JWT_SECRET_KEY=your_secret_key_here
 ```
 
-Run:
+3. Start MongoDB (if running locally):
+```bash
+mongod
+```
+
+4. Run the application:
 ```bash
 uvicorn main:app --reload
 ```
 
-API docs: `http://localhost:8000/api/docs`
+5. Access API docs: `http://localhost:8000/api/docs`
 
-## Deployment
+## Project Structure
 
-Works on Render/Railway free tier. Set environment variables and deploy via `render.yaml` or `Procfile`.
+```
+app/
+├── routes/          # API endpoints
+├── services/        # Business logic (LLM, DB, Vector)
+├── models/          # Pydantic models
+├── middleware/      # Auth middleware
+└── utils/           # Helper functions
+```
