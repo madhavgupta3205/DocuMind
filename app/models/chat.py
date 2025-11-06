@@ -7,6 +7,7 @@ class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
     top_k: Optional[int] = None
+    doc_id: Optional[str] = None  # Filter to specific document
 
 
 class ChatSessionCreate(BaseModel):

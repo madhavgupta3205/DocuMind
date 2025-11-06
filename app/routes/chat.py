@@ -22,16 +22,27 @@ limiter = Limiter(key_func=get_remote_address)
 async def stream_sse_response(
     query: str,
     session_id: str = None,
-    user_id: str = None
+    user_id: str = None,
+    doc_id: str = None
 ):
     try:
         logger.info(f"Processing query for user {user_id}: {query[:100]}...")
 
-        top_k = settings.TOP_K_CHUNKS
+        # Build filter dict for document-specific queries
+        filter_dict = None
+        if doc_id:
+            filter_dict = {"doc_id": doc_id}
+            logger.info(f"Filtering query to document: {doc_id}")
+
+        # Retrieve more chunks with enhanced LLM-powered search
+        # Double the initial retrieval
+        top_k = min(settings.TOP_K_CHUNKS * 2, 30)
         results = ChromaDB.search_with_reranking(
             query_text=query,
             n_results=top_k,
-            retrieve_count=15
+            retrieve_count=40,  # Cast wider net for better coverage
+            use_llm_expansion=True,  # Enable LLM-powered query understanding
+            filter_dict=filter_dict  # Apply document filter if specified
         )
 
         if not results['documents'][0]:
@@ -70,7 +81,8 @@ async def stream_sse_response(
             try:
                 session = await ChatDB.get_session(session_id)
                 if not session or session.get('user_id') != user_id:
-                    logger.warning(f"Invalid session {session_id} for user {user_id}")
+                    logger.warning(
+                        f"Invalid session {session_id} for user {user_id}")
                 else:
                     user_message = {
                         'role': 'user',
@@ -97,6 +109,7 @@ async def stream_sse_response(
         logger.error(f"Error in stream_sse_response: {e}")
         yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
+
 @router.post("/query")
 @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 async def query_documents(
@@ -108,7 +121,8 @@ async def query_documents(
         stream_sse_response(
             query=query_req.query,
             session_id=query_req.session_id,
-            user_id=current_user.user_id
+            user_id=current_user.user_id,
+            doc_id=query_req.doc_id
         ),
         media_type="text/event-stream"
     )

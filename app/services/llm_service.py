@@ -28,7 +28,8 @@ class LLMService:
             doc_id = chunk.get('doc_id', 'unknown')
             chunk_id = chunk.get('chunk_id', 'unknown')
 
-            context_parts.append(f"[Context {idx}]\n{text}\n")
+            # Use natural separators instead of "Context N"
+            context_parts.append(f"{text}")
             references.append({
                 'index': idx,
                 'doc_id': doc_id,
@@ -36,25 +37,28 @@ class LLMService:
                 'text_preview': text[:150] + '...' if len(text) > 150 else text
             })
 
-        context = "\n".join(context_parts)
+        # Join with clear separators
+        context = "\n\n---\n\n".join(context_parts)
 
-        prompt = f"""You are an intelligent assistant helping users understand their documents.
-Use the following document context to answer the question clearly and concisely.
+        prompt = f"""You are a knowledgeable assistant helping users understand their insurance documents. Answer questions clearly, naturally, and conversationally based on the provided information.
 
-IMPORTANT INSTRUCTIONS:
-1. Answer based ONLY on the provided context
-2. If the context doesn't contain enough information, say so clearly
-3. Include specific references to which context sections you used
-4. Be precise and factual
-5. At the end, cite the specific clauses or references from the documents that were used
+GUIDELINES:
+1. Answer ONLY using information from the provided document excerpts below
+2. If information is insufficient or missing, clearly state: "The provided documents don't contain information about [specific topic]"
+3. Provide direct, clear answers without artificial structure
+4. When referencing information, cite specific section numbers, clause names, or policy details mentioned in the documents
+5. Be conversational and natural - avoid phrases like "according to Context 1" or "based on the context"
+6. If you find relevant information, include the specific section/clause reference naturally (e.g., "According to Section 25..." or "As stated in the claim payment terms...")
+7. **IMPORTANT**: Pay special attention to EXCLUSIONS, LIMITATIONS, and "NOT COVERED" sections - insurance questions often ask about what's excluded
+8. If the query asks about coverage for something, check both what IS covered AND what is explicitly EXCLUDED
 
-Context:
+DOCUMENT EXCERPTS:
 {context}
 
-Question:
+USER QUESTION:
 {query}
 
-Answer (include citations to context sections used):"""
+ANSWER (Be direct and cite specific clauses):"""
 
         return prompt, references
 
@@ -66,14 +70,15 @@ Answer (include citations to context sections used):"""
     ) -> AsyncGenerator[str, None]:
         for attempt in range(self.max_retries):
             try:
-                logger.info(f"Starting streaming LLM response (attempt {attempt + 1})")
+                logger.info(
+                    f"Starting streaming LLM response (attempt {attempt + 1})")
 
                 stream = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are a helpful AI assistant that answers questions based on provided document context."
+                            "content": "You are a knowledgeable document assistant. Provide clear, natural, conversational answers based on document content. Reference specific sections/clauses naturally without mentioning 'context' or numbered excerpts. If information is missing, say so directly."
                         },
                         {
                             "role": "user",
@@ -97,7 +102,8 @@ Answer (include citations to context sections used):"""
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(self.retry_delay * (attempt + 1))
                 else:
-                    raise Exception("Rate limit exceeded. Please try again later.")
+                    raise Exception(
+                        "Rate limit exceeded. Please try again later.")
 
             except APIError as e:
                 logger.error(f"Groq API error (attempt {attempt + 1}): {e}")

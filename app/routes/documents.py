@@ -191,3 +191,31 @@ async def get_stats(current_user: TokenData = Depends(get_current_user)):
         "total_embeddings": total_embeddings,
         "user_id": current_user.user_id
     }
+
+
+@router.get("/list")
+async def list_documents(current_user: TokenData = Depends(get_current_user)):
+    """
+    List all documents for the current user.
+
+    Args:
+        current_user: Authenticated user
+
+    Returns:
+        List of user documents with metadata
+    """
+    try:
+        user_docs = ChromaDB.get_user_documents(current_user.user_id)
+
+        return {
+            "success": True,
+            "documents": user_docs,
+            "total": len(user_docs)
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to list documents: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve documents: {str(e)}"
+        )
