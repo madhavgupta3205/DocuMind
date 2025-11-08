@@ -7,12 +7,18 @@ from datetime import datetime
 from loguru import logger
 
 from app.models.chat import QueryRequest, ChatSessionCreate
-from app.services.vector_db import ChromaDB
 from app.services.llm_service import llm_service
 from app.services.database import ChatDB
 from app.middleware.auth_middleware import get_current_user
 from app.models.user import TokenData
 from app.config import settings
+
+# Import appropriate vector DB based on settings
+if settings.USE_PINECONE:
+    from app.services.pinecone_db import get_pinecone_db as get_vector_db
+else:
+    from app.services.vector_db import ChromaDB
+    get_vector_db = ChromaDB
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
@@ -37,7 +43,8 @@ async def stream_sse_response(
         # Retrieve more chunks with enhanced LLM-powered search
         # Double the initial retrieval
         top_k = min(settings.TOP_K_CHUNKS * 2, 30)
-        results = ChromaDB.search_with_reranking(
+        vector_db = get_vector_db()
+        results = vector_db.search_with_reranking(
             query_text=query,
             n_results=top_k,
             retrieve_count=40,  # Cast wider net for better coverage
@@ -45,17 +52,27 @@ async def stream_sse_response(
             filter_dict=filter_dict  # Apply document filter if specified
         )
 
-        if not results['documents'][0]:
+        # Handle both ChromaDB and Pinecone response formats
+        if isinstance(results, list):
+            # Pinecone format: list of dicts with 'text' and 'metadata'
+            documents = [r['text'] for r in results]
+            metadatas = [r['metadata'] for r in results]
+        else:
+            # ChromaDB format: dict with 'documents' and 'metadatas'
+            documents = results['documents'][0] if results['documents'] else []
+            metadatas = results['metadatas'][0] if results['metadatas'] else []
+
+        if not documents:
             yield f"data: {json.dumps({'type': 'token', 'content': 'No relevant documents found. Please upload documents first.'})}\n\n"
             return
 
         retrieved_chunks = []
-        for i in range(len(results['documents'][0])):
+        for i in range(len(documents)):
             chunk = {
-                'text': results['documents'][0][i],
-                'doc_id': results['metadatas'][0][i].get('doc_id', 'unknown'),
-                'chunk_id': results['metadatas'][0][i].get('chunk_id', 'unknown'),
-                'distance': results['distances'][0][i] if 'distances' in results else 0.0
+                'text': documents[i],
+                'doc_id': metadatas[i].get('doc_id', 'unknown'),
+                'chunk_id': metadatas[i].get('chunk_id', 'unknown'),
+                'distance': results.get('distances', [[0.0] * len(documents)])[0][i] if not isinstance(results, list) else 0.0
             }
             retrieved_chunks.append(chunk)
 

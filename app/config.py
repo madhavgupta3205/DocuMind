@@ -15,9 +15,16 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
 
     CHROMA_PERSIST_DIR: str = "./chroma_db"
+    
+    # Pinecone settings (production vector DB)
+    PINECONE_API_KEY: str = ""
+    PINECONE_INDEX_NAME: str = "documind"
+    PINECONE_NAMESPACE: str = "documents"
+    USE_PINECONE: bool = False  # Set to True to use Pinecone instead of ChromaDB
 
     EMBEDDING_MODEL: str = "multi-qa-mpnet-base-dot-v1"
     EMBEDDING_DEVICE: str = "cpu"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000

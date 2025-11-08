@@ -13,9 +13,15 @@ from loguru import logger
 
 from app.middleware.auth_middleware import get_current_user
 from app.models.user import TokenData
-from app.services.vector_db import ChromaDB
 from app.services.preprocessing import process_document, chunk_text
 from app.config import settings
+
+# Import appropriate vector DB based on settings
+if settings.USE_PINECONE:
+    from app.services.pinecone_db import get_pinecone_db as get_vector_db
+else:
+    from app.services.vector_db import ChromaDB
+    get_vector_db = ChromaDB
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -86,7 +92,7 @@ async def upload_document(
 
         logger.info(f"Generated {len(chunks)} chunks from document")
 
-        # Prepare for ChromaDB
+        # Prepare for Vector DB
         chunk_ids = []
         chunk_texts = []
         metadatas = []
@@ -104,8 +110,9 @@ async def upload_document(
                 "chunk_index": i
             })
 
-        # Add to ChromaDB
-        ChromaDB.add_documents(
+        # Add to Vector DB
+        vector_db = get_vector_db()
+        vector_db.add_documents(
             texts=chunk_texts,
             metadatas=metadatas,
             ids=chunk_ids
@@ -154,7 +161,8 @@ async def delete_document(
                 detail="Unauthorized to delete this document"
             )
 
-        ChromaDB.delete_by_doc_id(doc_id)
+        vector_db = get_vector_db()
+        vector_db.delete_by_doc_id(doc_id)
 
         logger.info(f"Document deleted: {doc_id}")
 
@@ -185,7 +193,11 @@ async def get_stats(current_user: TokenData = Depends(get_current_user)):
     Returns:
         Document statistics
     """
-    total_embeddings = ChromaDB.get_collection_count()
+    vector_db = get_vector_db()
+    if hasattr(vector_db, 'get_collection_count'):
+        total_embeddings = vector_db.get_collection_count()
+    else:
+        total_embeddings = "N/A"  # Pinecone doesn't expose count easily
 
     return {
         "total_embeddings": total_embeddings,
@@ -205,7 +217,8 @@ async def list_documents(current_user: TokenData = Depends(get_current_user)):
         List of user documents with metadata
     """
     try:
-        user_docs = ChromaDB.get_user_documents(current_user.user_id)
+        vector_db = get_vector_db()
+        user_docs = vector_db.get_user_documents(current_user.user_id)
 
         return {
             "success": True,
