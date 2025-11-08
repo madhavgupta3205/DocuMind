@@ -7,93 +7,92 @@ services:
     buildCommand: pip install --upgrade pip setuptools wheel && pip install --timeout=600 -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
-    
+
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
-      
+
       - key: MONGODB_URL
         sync: false
-      
+
       - key: MONGODB_DB_NAME
         value: documind_ai
-      
+
       - key: GROQ_API_KEY
         sync: false
-      
+
       - key: JWT_SECRET_KEY
         generateValue: true
-      
+
       - key: JWT_ALGORITHM
         value: HS256
-      
+
       - key: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         value: 10080
-      
+
       - key: CHROMA_PERSIST_DIR
         value: ./chroma_db
-      
+
       - key: EMBEDDING_MODEL
-        value: multi-qa-mpnet-base-dot-v1
-      
+        value: all-MiniLM-L6-v2
+
       - key: EMBEDDING_DEVICE
         value: cpu
-      
+
       - key: HOST
         value: 0.0.0.0
-      
+
       - key: PORT
         value: 10000
-      
+
       - key: ALLOWED_ORIGINS
-        value: https://documind.vercel.app,http://localhost:5173,http://localhost:3000
-      
+        value: https://documind-alpha.vercel.app,http://localhost:5173,http://localhost:3000
+
       - key: UPLOAD_DIR
         value: ./uploads
-      
+
       - key: MAX_FILE_SIZE
         value: 52428800
-      
+
       - key: RATE_LIMIT_PER_MINUTE
         value: 10
-      
+
       - key: RATE_LIMIT_PER_HOUR
         value: 100
-      
+
       - key: MIN_CHUNK_SIZE
         value: 300
-      
+
       - key: MAX_CHUNK_SIZE
         value: 1200
-      
+
       - key: CHUNK_OVERLAP
         value: 100
-      
+
       - key: TOP_K_CHUNKS
         value: 5
-      
+
       - key: RERANK_TOP_K
         value: 5
-      
+
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
-      
+
       # Pinecone Configuration (Production Vector DB)
       - key: USE_PINECONE
         value: true
-      
+
       - key: PINECONE_API_KEY
         sync: false
-      
+
       - key: PINECONE_INDEX_NAME
         value: documind
-      
+
       - key: PINECONE_NAMESPACE
         value: documents
-      
+
       - key: LLM_MODEL
         value: llama-3.3-70b-versatile
-      
+
       - key: FRONTEND_URL
         sync: false
-

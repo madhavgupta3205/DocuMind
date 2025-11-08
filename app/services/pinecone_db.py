@@ -56,7 +56,8 @@ def calculate_concept_coverage(key_concepts: List[str], text: str) -> float:
         return 0.0
 
     text_lower = text.lower()
-    matches = sum(1 for concept in key_concepts if concept.lower() in text_lower)
+    matches = sum(
+        1 for concept in key_concepts if concept.lower() in text_lower)
     return matches / len(key_concepts)
 
 
@@ -88,39 +89,42 @@ class PineconeDB:
         # Lazy load embedding model to save memory
         self._embedding_model = None
         self.dimension = 384  # multi-qa-mpnet-base-dot-v1 dimension
-        
+
         # Initialize Pinecone
         self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
         self.index_name = settings.PINECONE_INDEX_NAME
-        
+
         # Create index if it doesn't exist
         self._ensure_index_exists()
-        
+
         # Connect to index
         self.index = self.pc.Index(self.index_name)
-        
+
         # Initialize Groq for LLM expansion
         try:
             self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
         except Exception as e:
-            logger.warning(f"Groq initialization failed: {e}. LLM expansion will be disabled.")
+            logger.warning(
+                f"Groq initialization failed: {e}. LLM expansion will be disabled.")
             self.groq_client = None
 
         logger.info(f"✅ PineconeDB initialized with index: {self.index_name}")
-    
+
     @property
     def embedding_model(self):
         """Lazy load embedding model only when needed."""
         if self._embedding_model is None:
             logger.info("Loading embedding model...")
-            self._embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+            self._embedding_model = SentenceTransformer(
+                settings.EMBEDDING_MODEL)
         return self._embedding_model
 
     def _ensure_index_exists(self):
         """Create Pinecone index if it doesn't exist."""
         try:
-            existing_indexes = [index['name'] for index in self.pc.list_indexes()]
-            
+            existing_indexes = [index['name']
+                                for index in self.pc.list_indexes()]
+
             if self.index_name not in existing_indexes:
                 logger.info(f"Creating Pinecone index: {self.index_name}")
                 self.pc.create_index(
@@ -146,7 +150,7 @@ class PineconeDB:
                 logger.info(f"✅ Index {self.index_name} created successfully")
             else:
                 logger.info(f"Index {self.index_name} already exists")
-                
+
         except Exception as e:
             logger.error(f"Error ensuring index exists: {e}")
             raise
@@ -186,7 +190,8 @@ class PineconeDB:
             batch_size = 100
             for i in range(0, len(vectors), batch_size):
                 batch = vectors[i:i + batch_size]
-                self.index.upsert(vectors=batch, namespace=settings.PINECONE_NAMESPACE)
+                self.index.upsert(
+                    vectors=batch, namespace=settings.PINECONE_NAMESPACE)
 
             logger.info(f"✅ Added {len(texts)} documents to Pinecone")
             return ids
@@ -259,7 +264,8 @@ Respond in JSON format:
         """Enhanced search with LLM expansion and hybrid scoring."""
         try:
             # Step 1: Expand query with LLM
-            expansion = {"variants": [query_text], "key_concepts": [], "exclusion_terms": [], "hypothetical_answer": query_text}
+            expansion = {"variants": [query_text], "key_concepts": [
+            ], "exclusion_terms": [], "hypothetical_answer": query_text}
             if use_llm_expansion:
                 expansion = self.llm_expand_query(query_text)
 
@@ -302,22 +308,25 @@ Respond in JSON format:
             scored_results = []
             for match in unique_results.values():
                 text = match.metadata.get("text", "")
-                
+
                 # Semantic score (cosine similarity from Pinecone)
                 semantic_score = match.score
-                
+
                 # Lexical score
                 lexical_score = calculate_lexical_score(query_text, text)
-                
+
                 # Concept coverage
-                concept_score = calculate_concept_coverage(expansion["key_concepts"], text)
-                
+                concept_score = calculate_concept_coverage(
+                    expansion["key_concepts"], text)
+
                 # Exclusion penalty
-                exclusion_penalty = calculate_exclusion_penalty(expansion["exclusion_terms"], text)
-                
+                exclusion_penalty = calculate_exclusion_penalty(
+                    expansion["exclusion_terms"], text)
+
                 # Multi-match bonus
-                multi_match_bonus = calculate_multi_match_bonus(expansion["variants"], text)
-                
+                multi_match_bonus = calculate_multi_match_bonus(
+                    expansion["variants"], text)
+
                 # Hybrid score (weighted combination)
                 final_score = (
                     semantic_score * 0.45 +
@@ -326,7 +335,7 @@ Respond in JSON format:
                     exclusion_penalty * 0.10 +
                     multi_match_bonus * 0.10
                 )
-                
+
                 scored_results.append({
                     "text": text,
                     "metadata": {k: v for k, v in match.metadata.items() if k != "text"},
@@ -340,7 +349,8 @@ Respond in JSON format:
             scored_results.sort(key=lambda x: x["score"], reverse=True)
             top_results = scored_results[:n_results]
 
-            logger.info(f"Retrieved {len(top_results)} results after reranking")
+            logger.info(
+                f"Retrieved {len(top_results)} results after reranking")
             return top_results
 
         except Exception as e:
@@ -353,14 +363,16 @@ Respond in JSON format:
             # Pinecone requires explicit IDs for deletion
             # We'll use metadata filtering to find and delete
             # Note: Pinecone free tier has limitations on metadata filtering
-            
+
             # First, fetch all vectors with this doc_id
             # This is a workaround since free tier may not support delete by metadata
-            logger.warning("Pinecone delete by metadata may require paid tier. Consider storing doc_id mapping.")
-            
+            logger.warning(
+                "Pinecone delete by metadata may require paid tier. Consider storing doc_id mapping.")
+
             # For now, we'll use delete_by_filter if available
             try:
-                self.index.delete(filter={"doc_id": doc_id}, namespace=settings.PINECONE_NAMESPACE)
+                self.index.delete(
+                    filter={"doc_id": doc_id}, namespace=settings.PINECONE_NAMESPACE)
                 logger.info(f"Deleted document {doc_id}")
                 return 1
             except Exception as e:
@@ -376,7 +388,7 @@ Respond in JSON format:
         try:
             # Note: Pinecone free tier has limitations on metadata queries
             # This is a simplified implementation
-            
+
             # Query with user_id filter
             results = self.index.query(
                 vector=[0] * self.dimension,  # Dummy vector
@@ -385,7 +397,7 @@ Respond in JSON format:
                 namespace=settings.PINECONE_NAMESPACE,
                 filter={"user_id": user_id}
             )
-            
+
             # Group by doc_id
             doc_map = {}
             for match in results.matches:
@@ -399,7 +411,7 @@ Respond in JSON format:
                     }
                 if doc_id:
                     doc_map[doc_id]["chunk_count"] += 1
-            
+
             return list(doc_map.values())
 
         except Exception as e:
@@ -410,7 +422,8 @@ Respond in JSON format:
         """Delete all documents (admin/testing only)."""
         try:
             # Delete all vectors in namespace
-            self.index.delete(delete_all=True, namespace=settings.PINECONE_NAMESPACE)
+            self.index.delete(
+                delete_all=True, namespace=settings.PINECONE_NAMESPACE)
             logger.info("Deleted all documents from Pinecone")
             return 1
         except Exception as e:

@@ -29,14 +29,11 @@ export default function Chat({ token, user, onLogout }) {
 
   const fetchDocuments = async () => {
     try {
-      const response = await axios.get(
-        `${API_URL}/api/v1/documents/list`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await axios.get(`${API_URL}/api/v1/documents/list`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       setDocuments(response.data.documents || []);
     } catch (error) {
       console.error("Failed to fetch documents:", error);
@@ -52,16 +49,12 @@ export default function Chat({ token, user, onLogout }) {
     formData.append("file", selectedFile);
 
     try {
-      await axios.post(
-        `${API_URL}/api/v1/documents/upload`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      await axios.post(`${API_URL}/api/v1/documents/upload`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
       alert("Document uploaded successfully!");
       setFile(null);
       // Refresh document list

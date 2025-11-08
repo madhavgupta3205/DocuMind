@@ -21,7 +21,8 @@ if not settings.USE_PINECONE:
         from chromadb.config import Settings as ChromaSettings
         from sentence_transformers import SentenceTransformer
     except ImportError:
-        logger.warning("ChromaDB not installed. Install with: pip install chromadb sentence-transformers")
+        logger.warning(
+            "ChromaDB not installed. Install with: pip install chromadb sentence-transformers")
         chromadb = None
         ChromaSettings = None
         SentenceTransformer = None
@@ -236,7 +237,7 @@ class ChromaDB:
                     settings.EMBEDDING_MODEL,
                     device=settings.EMBEDDING_DEVICE
                 )
-            
+
             embeddings = cls._embedding_model.encode(
                 texts,
                 show_progress_bar=False
@@ -271,7 +272,7 @@ class ChromaDB:
                     settings.EMBEDDING_MODEL,
                     device=settings.EMBEDDING_DEVICE
                 )
-            
+
             # For now we keep the original query for embedding.
             # Query variants and lexical reranking are applied in search_with_reranking.
             query_embedding = cls._embedding_model.encode(

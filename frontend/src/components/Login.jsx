@@ -22,10 +22,7 @@ export default function Login({ onLogin }) {
         ? { email, password, full_name: fullName }
         : { email, password };
 
-      const response = await axios.post(
-        `${API_URL}${endpoint}`,
-        payload
-      );
+      const response = await axios.post(`${API_URL}${endpoint}`, payload);
       onLogin(response.data.access_token, { email });
     } catch (err) {
       setError(err.response?.data?.detail || "Authentication failed");
