@@ -60,6 +60,7 @@
 - ✅ Serverless, no maintenance required
 - ✅ Built-in persistence and backups
 - ✅ Better performance than local ChromaDB
+- ✅ Solves Render's removed free disk storage issue
 
 **Setup Steps:**
 
@@ -73,53 +74,55 @@
    - Click "Create API Key"
    - **Copy the key** (save it for later)
 
-3. **Create Index (Optional - Auto-created by app):**
-   - The app will automatically create an index named `documind`
-   - Or manually create: Click "Indexes" → "Create Index"
-   - Name: `documind`
-   - Dimensions: `384`
-   - Metric: `cosine`
-   - Region: `us-east-1` (free tier)
+3. **Index Auto-Creation:**
+   - The app will automatically create an index named `documind` on first run
+   - Dimensions: `384` | Metric: `cosine` | Region: `us-east-1`
 
 ---
 
-### 4. Deploy Backend (Choose One Option)
+### 4. Deploy Backend to Render 🚀
+
+**Why Render:**
+- ✅ 15-minute build timeout (handles large Python dependencies)
+- ✅ 750 hours/month free tier
+- ✅ Optimized for ML/AI applications
+- ✅ Works perfectly with Pinecone
 
 ---
 
-## **OPTION A: Railway (Recommended - Simple & Fast)** 🚂
+## **Deploy Steps:**
 
-1. **Create Railway Account:**
-   - Go to https://railway.app
-   - Sign up with GitHub (gets $5 credit = ~500 hours)
+1. **Create Render Account:**
+   - Go to https://render.com
+   - Sign up with GitHub
 
-2. **Create New Project:**
-   - Click "New Project" → "Deploy from GitHub repo"
-   - Select your `DocuMind_final` repository
-   - Railway auto-detects Python and uses `railway.json`
+2. **Deploy with render.yaml:**
+   - Click "New +" → "Blueprint"
+   - Connect your GitHub repository
+   - Render auto-detects `render.yaml`
+   - Click "Apply"
 
 3. **Set Environment Variables:**
-   - Go to "Variables" tab
-   - Add these variables:
+   - After creation, go to service → "Environment"
+   - Set these required variables:
    ```
    MONGODB_URL=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/
-   DATABASE_NAME=documind_ai
    GROQ_API_KEY=your_groq_api_key_here
-   JWT_SECRET_KEY=your-secret-key-here-min-32-chars
-   FRONTEND_URL=https://your-app.vercel.app
-   
-   # Pinecone Configuration (Production Vector DB)
-   USE_PINECONE=true
    PINECONE_API_KEY=your_pinecone_api_key_here
-   PINECONE_INDEX_NAME=documind
-   PINECONE_NAMESPACE=documents
+   FRONTEND_URL=https://your-app.vercel.app
    ```
+   
+   Note: Other variables are pre-configured in `render.yaml`
 
 4. **Deploy:**
-   - Railway automatically builds and deploys
-   - Wait 2-3 minutes for build to complete
-   - Copy the deployment URL (e.g., `documind-production.up.railway.app`)
-   - **No volume needed** - Pinecone stores vectors in the cloud!
+   - Render builds automatically (takes 10-15 minutes first time)
+   - Check "Logs" tab for build progress
+   - Once deployed, copy the URL: `https://documind-backend.onrender.com`
+
+5. **Verify Deployment:**
+   - Visit: `https://documind-backend.onrender.com/docs`
+   - Should see FastAPI Swagger UI
+   - Test `/health` endpoint
 
 ---
 
@@ -289,35 +292,33 @@ Your app is now live at:
 
 ---
 
-## 📊 Updated Deployment Options
+## 📊 Production Architecture
 
-### **Option 1: Render (Ephemeral Storage) - Simplest**
-- **Pros:** Free, easy setup, auto-deploy from GitHub
-- **Cons:** ChromaDB data lost on redeploy/restart
-- **Best for:** Testing, demos, development
-- **Workaround:** Users re-upload documents after restarts
+**Deployment Stack:**
+- **Backend:** Render (750 hrs/month, 512MB RAM)
+- **Vector DB:** Pinecone (1GB free, persistent)
+- **Frontend:** Vercel (100GB bandwidth)
+- **Database:** MongoDB Atlas (512MB storage)
+- **LLM:** Groq API (30 req/min free)
 
-### **Option 2: Railway (Persistent Storage) - Recommended**
-- **Pros:** 1GB persistent volume, $5 credit/month (~500 hours), better performance
-- **Cons:** Credit expires eventually
-- **Best for:** Production use with 10-50 documents
-
-### **Option 3: Render + Pinecone - Production Ready**
-- **Pros:** Persistent vectors, scalable, no data loss
-- **Cons:** Requires Pinecone setup (5 min extra)
-- **Best for:** Long-term production use
+**Why This Stack:**
+- ✅ All free tiers available
+- ✅ Production-grade performance
+- ✅ Persistent vector storage
+- ✅ No disk storage required
+- ✅ Auto-scaling and global CDN
 
 ---
 
 ## 📊 Resource Limits (Free Tier)
 
-| Service | Limit | Storage | Your Usage |
-|---------|-------|---------|------------|
-| Render | 750 hrs/month, 512MB RAM | Ephemeral only | Good for testing |
-| Railway | $5 credit (~500 hrs) | 1GB persistent | **Best option** |
-| Vercel | 100GB bandwidth | N/A | ~1,000 users/month |
-| MongoDB Atlas | 512MB storage | Persistent | ~50MB for 100 chats |
-| Pinecone | 1 pod, 1GB | Persistent vectors | ~250MB for 50 docs |
+| Service | Limit | Your Usage (10-50 docs) | Cost After Free |
+|---------|-------|------------------------|-----------------|
+| Render | 750 hrs/month | 24/7 uptime | $7/month |
+| Pinecone | 1GB storage | ~250MB | Still free |
+| Vercel | 100GB bandwidth | ~1GB | $20/month |
+| MongoDB Atlas | 512MB storage | ~50MB | Still free |
+| Groq | 30 req/min | ~10 req/min | Pay per use |
 
 ---
 

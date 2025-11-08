@@ -77,3 +77,23 @@ services:
       
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
+      
+      # Pinecone Configuration (Production Vector DB)
+      - key: USE_PINECONE
+        value: true
+      
+      - key: PINECONE_API_KEY
+        sync: false
+      
+      - key: PINECONE_INDEX_NAME
+        value: documind
+      
+      - key: PINECONE_NAMESPACE
+        value: documents
+      
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      
+      - key: FRONTEND_URL
+        sync: false
+
