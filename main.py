@@ -100,6 +100,12 @@ async def root():
     }
 
 
+@app.get("/health")
+async def simple_health():
+    """Simple health check for Railway/Render"""
+    return {"status": "ok"}
+
+
 @app.get("/api/v1/health")
 async def health_check():
     health_status = {

@@ -1,0 +1,15 @@
+# Nixpacks configuration for Railway deployment
+[phases.setup]
+nixPkgs = ["python313"]
+
+[phases.install]
+cmds = [
+    "pip install --upgrade pip setuptools wheel",
+    "pip install --no-cache-dir --timeout=600 -r requirements.txt"
+]
+
+[phases.build]
+cmds = ["echo 'Build complete'"]
+
+[start]
+cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1"
