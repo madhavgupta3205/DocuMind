@@ -9,7 +9,6 @@ import sys
 
 from app.config import settings
 from app.services.database import MongoDB
-from app.services.vector_db import ChromaDB
 from app.routes import auth, chat, documents
 
 logger.remove()
@@ -34,7 +33,13 @@ async def lifespan(app: FastAPI):
         await MongoDB.connect()
         logger.info("✓ MongoDB connected")
 
-        logger.info(f"✓ ChromaDB initialized with {ChromaDB.get_collection_count()} embeddings")
+        # Initialize Pinecone if enabled
+        if settings.USE_PINECONE:
+            from app.services.pinecone_db import get_pinecone_db
+            pinecone_db = get_pinecone_db()
+            logger.info("✓ PineconeDB initialized successfully")
+        else:
+            logger.info("✓ Using ChromaDB for local development")
 
         logger.info("✓ DocuMind AI API started successfully!")
 
@@ -122,10 +127,12 @@ async def health_check():
         health_status["status"] = "degraded"
 
     try:
-        count = ChromaDB.get_collection_count()
-        health_status["chromadb"] = f"connected ({count} embeddings)"
+        if settings.USE_PINECONE:
+            health_status["vector_db"] = "pinecone (production)"
+        else:
+            health_status["vector_db"] = "chromadb (local dev)"
     except Exception as e:
-        health_status["chromadb"] = f"error: {str(e)}"
+        health_status["vector_db"] = f"error: {str(e)}"
         health_status["status"] = "degraded"
 
     return health_status
