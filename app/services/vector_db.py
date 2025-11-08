@@ -188,10 +188,8 @@ class ChromaDB:
                 metadata={"hnsw:space": "cosine"}
             )
 
-            cls.embedding_model = SentenceTransformer(
-                settings.EMBEDDING_MODEL,
-                device=settings.EMBEDDING_DEVICE
-            )
+            # Lazy load embedding model to save memory
+            cls._embedding_model = None
 
             logger.info(
                 f"ChromaDB initialized with {cls.collection.count()} embeddings"
@@ -217,7 +215,15 @@ class ChromaDB:
             ids: List of unique IDs for chunks
         """
         try:
-            embeddings = cls.embedding_model.encode(
+            # Lazy load embedding model
+            if cls._embedding_model is None:
+                logger.info("Loading embedding model...")
+                cls._embedding_model = SentenceTransformer(
+                    settings.EMBEDDING_MODEL,
+                    device=settings.EMBEDDING_DEVICE
+                )
+            
+            embeddings = cls._embedding_model.encode(
                 texts,
                 show_progress_bar=False
             ).tolist()
@@ -244,9 +250,17 @@ class ChromaDB:
         use_expansion: bool = True
     ) -> Dict[str, Any]:
         try:
+            # Lazy load embedding model
+            if cls._embedding_model is None:
+                logger.info("Loading embedding model...")
+                cls._embedding_model = SentenceTransformer(
+                    settings.EMBEDDING_MODEL,
+                    device=settings.EMBEDDING_DEVICE
+                )
+            
             # For now we keep the original query for embedding.
             # Query variants and lexical reranking are applied in search_with_reranking.
-            query_embedding = cls.embedding_model.encode(
+            query_embedding = cls._embedding_model.encode(
                 [query_text],
                 show_progress_bar=False
             ).tolist()

@@ -85,7 +85,8 @@ class PineconeDB:
 
     def __init__(self):
         """Initialize Pinecone with serverless index."""
-        self.embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        # Lazy load embedding model to save memory
+        self._embedding_model = None
         self.dimension = 384  # multi-qa-mpnet-base-dot-v1 dimension
         
         # Initialize Pinecone
@@ -106,6 +107,14 @@ class PineconeDB:
             self.groq_client = None
 
         logger.info(f"✅ PineconeDB initialized with index: {self.index_name}")
+    
+    @property
+    def embedding_model(self):
+        """Lazy load embedding model only when needed."""
+        if self._embedding_model is None:
+            logger.info("Loading embedding model...")
+            self._embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        return self._embedding_model
 
     def _ensure_index_exists(self):
         """Create Pinecone index if it doesn't exist."""
