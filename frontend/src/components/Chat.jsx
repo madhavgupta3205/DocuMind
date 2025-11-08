@@ -190,8 +190,8 @@ export default function Chat({ token, user, onLogout }) {
 
       {/* Document Manager Modal */}
       {showDocManager && (
-        <DocumentManager 
-          onClose={() => setShowDocManager(false)} 
+        <DocumentManager
+          onClose={() => setShowDocManager(false)}
           onDocumentsChange={(docs) => setDocuments(docs)}
         />
       )}

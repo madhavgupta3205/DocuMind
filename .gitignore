@@ -23,6 +23,11 @@ logs/
 *.log
 server.log
 nohup.out
+backend.log
+
+# Testing scripts (keep local only)
+test_query.py
+delete_all_docs.py
 
 # Node
 node_modules/
