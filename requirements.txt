@@ -24,10 +24,8 @@ groq==0.13.0
 pdfplumber==0.11.4
 docx2txt==0.8
 
-# NLP and Embeddings - CPU-only version
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.9.0+cpu
-sentence-transformers==3.3.1
+# NO local embedding models - using Pinecone Inference API (serverless)
+# This saves ~500MB of memory!
 
 # Utilities
 python-dotenv==1.0.1

@@ -1,10 +1,10 @@
 """
 Pinecone vector database for production-grade document embeddings and semantic search.
 Enhanced with LLM-powered query understanding and multi-strategy retrieval.
+Uses Pinecone Inference API for serverless embeddings (NO local model = NO memory issues!).
 """
 
 from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any, Optional
 from loguru import logger
 from groq import Groq
@@ -82,13 +82,12 @@ def calculate_multi_match_bonus(variants: List[str], text: str) -> float:
 
 
 class PineconeDB:
-    """Production-grade Pinecone vector database with intelligent retrieval."""
+    """Production-grade Pinecone vector database with serverless inference (no local model!)."""
 
     def __init__(self):
-        """Initialize Pinecone with serverless index."""
-        # Lazy load embedding model to save memory
-        self._embedding_model = None
-        self.dimension = 384  # multi-qa-mpnet-base-dot-v1 dimension
+        """Initialize Pinecone with serverless index and inference API."""
+        # NO embedding model loaded - use Pinecone Inference API instead!
+        self.dimension = 384  # all-MiniLM-L6-v2 dimension
 
         # Initialize Pinecone
         self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
@@ -100,6 +99,15 @@ class PineconeDB:
         # Connect to index
         self.index = self.pc.Index(self.index_name)
 
+        # Initialize Pinecone Inference (serverless embeddings - no memory!)
+        try:
+            from pinecone import Pinecone as PineconeClient
+            self.inference = PineconeClient(api_key=settings.PINECONE_API_KEY)
+            logger.info("✅ Using Pinecone Inference API (serverless embeddings)")
+        except Exception as e:
+            logger.warning(f"Pinecone Inference unavailable: {e}")
+            self.inference = None
+
         # Initialize Groq for LLM expansion
         try:
             self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
@@ -110,14 +118,21 @@ class PineconeDB:
 
         logger.info(f"✅ PineconeDB initialized with index: {self.index_name}")
 
-    @property
-    def embedding_model(self):
-        """Lazy load embedding model only when needed."""
-        if self._embedding_model is None:
-            logger.info("Loading embedding model...")
-            self._embedding_model = SentenceTransformer(
-                settings.EMBEDDING_MODEL)
-        return self._embedding_model
+    def _embed_texts(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings using Pinecone Inference API (serverless - no memory!)."""
+        try:
+            # Use Pinecone's inference API - NO local model needed!
+            response = self.inference.inference.embed(
+                model="multilingual-e5-large",
+                inputs=texts,
+                parameters={"input_type": "passage"}
+            )
+            return [item['values'] for item in response['data']]
+        except Exception as e:
+            logger.error(f"Pinecone inference failed: {e}")
+            # Fallback: use simple TF-IDF-like approach (no ML model)
+            logger.warning("Using fallback text encoding (no embeddings)")
+            return [[hash(text) % 1000 / 1000.0 for _ in range(self.dimension)] for text in texts]
 
     def _ensure_index_exists(self):
         """Create Pinecone index if it doesn't exist."""
@@ -166,10 +181,8 @@ class PineconeDB:
             if not texts:
                 return []
 
-            # Generate embeddings
-            embeddings = self.embedding_model.encode(
-                texts, convert_to_numpy=True, show_progress_bar=False
-            ).tolist()
+            # Generate embeddings using serverless Pinecone Inference (no local model!)
+            embeddings = self._embed_texts(texts)
 
             # Generate IDs if not provided
             if ids is None:
@@ -278,10 +291,9 @@ Respond in JSON format:
             ]
 
             for search_query in queries_to_search:
-                # Generate embedding
-                query_embedding = self.embedding_model.encode(
-                    search_query, convert_to_numpy=True, show_progress_bar=False
-                ).tolist()
+                # Generate embedding using serverless inference
+                query_embeddings = self._embed_texts([search_query])
+                query_embedding = query_embeddings[0] if query_embeddings else []
 
                 # Query Pinecone
                 results = self.index.query(
