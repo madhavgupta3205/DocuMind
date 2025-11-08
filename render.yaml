@@ -4,13 +4,13 @@ services:
     runtime: python
     plan: free
     region: oregon
-    buildCommand: pip install --no-cache-dir --upgrade pip setuptools wheel && pip install --no-cache-dir --timeout=600 -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install --timeout=600 -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.12.0
       
       - key: MONGODB_URL
         sync: false
