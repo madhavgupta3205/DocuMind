@@ -19,6 +19,12 @@ if settings.USE_PINECONE:
 else:
     from app.services.vector_db import ChromaDB
     get_vector_db = ChromaDB
+    # Initialize ChromaDB for local development
+    try:
+        if ChromaDB.collection is None:
+            ChromaDB.initialize()
+    except Exception as e:
+        logger.error(f"Failed to initialize ChromaDB: {e}")
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 

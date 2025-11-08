@@ -1,11 +1,9 @@
 """
 ChromaDB vector database for document embeddings and semantic search.
 Enhanced with LLM-powered query understanding and multi-strategy retrieval.
+Only imported when USE_PINECONE=False (local development).
 """
 
-import chromadb
-from chromadb.config import Settings as ChromaSettings
-from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Any, Optional
 from loguru import logger
 from groq import Groq
@@ -15,6 +13,22 @@ from app.config import settings
 import re
 import difflib
 import math
+
+# Conditional imports - only load ChromaDB if not using Pinecone
+if not settings.USE_PINECONE:
+    try:
+        import chromadb
+        from chromadb.config import Settings as ChromaSettings
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        logger.warning("ChromaDB not installed. Install with: pip install chromadb sentence-transformers")
+        chromadb = None
+        ChromaSettings = None
+        SentenceTransformer = None
+else:
+    chromadb = None
+    ChromaSettings = None
+    SentenceTransformer = None
 
 
 def normalize_text(s: str) -> str:
@@ -556,9 +570,9 @@ class ChromaDB:
                 logger.info("No documents to delete")
                 return 0
         except Exception as e:
-            logger.error(f"Failed to delete all documents: {e}")
+            logger.error(f"Failed to initialize ChromaDB: {e}")
             raise
 
 
-# Initialize on module import
-ChromaDB.initialize()
+# Do NOT initialize on module import - let routes handle initialization
+# This prevents import errors when ChromaDB is not installed (production with Pinecone)

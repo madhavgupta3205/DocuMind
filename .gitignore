@@ -32,11 +32,15 @@ backend.log
 test_query.py
 delete_all_docs.py
 
-# Documentation (keep local only)
+# Documentation (keep local only - not for GitHub)
 QUICK_START.md
 RAILWAY_FIX.md
 IMPROVEMENTS.md
 PRODUCTION_README.md
+PRODUCTION_SETUP.md
+*_FIX.md
+*_NOTES.md
+*_TODO.md
 
 # Node
 node_modules/

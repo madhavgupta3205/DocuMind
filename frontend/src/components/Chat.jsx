@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import DocumentManager from "./DocumentManager";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 export default function Chat({ token, user, onLogout }) {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState([]);
@@ -28,7 +30,7 @@ export default function Chat({ token, user, onLogout }) {
   const fetchDocuments = async () => {
     try {
       const response = await axios.get(
-        "http://localhost:8000/api/v1/documents/list",
+        `${API_URL}/api/v1/documents/list`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -51,7 +53,7 @@ export default function Chat({ token, user, onLogout }) {
 
     try {
       await axios.post(
-        "http://localhost:8000/api/v1/documents/upload",
+        `${API_URL}/api/v1/documents/upload`,
         formData,
         {
           headers: {
@@ -87,7 +89,7 @@ export default function Chat({ token, user, onLogout }) {
         queryPayload.doc_id = selectedDocId;
       }
 
-      const response = await fetch("http://localhost:8000/api/v1/chat/query", {
+      const response = await fetch(`${API_URL}/api/v1/chat/query`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
