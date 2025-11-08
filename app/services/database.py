@@ -3,8 +3,6 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from loguru import logger
 from bson import ObjectId
-from urllib.parse import quote_plus
-import re
 
 from app.config import settings
 
@@ -15,27 +13,9 @@ class MongoDB:
     db = None
 
     @classmethod
-    def _escape_mongodb_url(cls, url: str) -> str:
-        """Auto-escape special characters in MongoDB password."""
-        # Pattern: mongodb+srv://username:password@host
-        pattern = r'mongodb\+srv://([^:]+):([^@]+)@(.+)'
-        match = re.match(pattern, url)
-        
-        if match:
-            username, password, rest = match.groups()
-            # Only escape if not already escaped
-            if '%' not in password:
-                escaped_password = quote_plus(password)
-                return f"mongodb+srv://{username}:{escaped_password}@{rest}"
-        
-        return url
-
-    @classmethod
     async def connect(cls):
         try:
-            # Auto-escape special characters in password
-            escaped_url = cls._escape_mongodb_url(settings.MONGODB_URL)
-            cls.client = AsyncIOMotorClient(escaped_url)
+            cls.client = AsyncIOMotorClient(settings.MONGODB_URL)
             cls.db = cls.client[settings.MONGODB_DB_NAME]
 
             await cls.client.admin.command('ping')
