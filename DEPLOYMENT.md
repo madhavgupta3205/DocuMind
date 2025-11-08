@@ -119,11 +119,16 @@
      - Build Command: `npm run build` (auto-detected)
      - Output Directory: `dist` (auto-detected)
 
-3. **Environment Variables:**
-   Add this environment variable:
-   ```
-   VITE_API_URL = https://documind-backend.onrender.com
-   ```
+3. **Environment Variables (IMPORTANT!):**
+   Add this environment variable in Vercel dashboard:
+   
+   **Key:** `VITE_API_URL`
+   **Value:** `https://documind-backend.onrender.com` (or your Render backend URL)
+   
+   ⚠️ **Note:** This is set in Vercel's dashboard, NOT in your code!
+   - The backend URL is public-facing (users need it)
+   - But it's protected by JWT authentication
+   - Never commit API keys or secrets to GitHub!
 
 4. **Deploy:**
    - Click "Deploy"
@@ -172,23 +177,25 @@
 
 ---
 
-## 6. Update Backend URL in Code (Optional)
+## 6. Security Best Practices ✅
 
-If you want to update the default API URL in your code:
+**What's Safe to Expose:**
+- ✅ Backend URL (public-facing, protected by JWT auth)
+- ✅ Frontend URL (public website)
+- ✅ MongoDB connection string in Render env vars (encrypted)
 
-**frontend/.env.production:**
-```env
-VITE_API_URL=https://documind-backend.onrender.com
-```
+**What to NEVER Commit to GitHub:**
+- ❌ `.env` files with secrets
+- ❌ JWT_SECRET_KEY
+- ❌ GROQ_API_KEY
+- ❌ MongoDB passwords in plain text
+- ❌ API tokens or credentials
 
-Then commit and push:
-```bash
-git add frontend/.env.production
-git commit -m "chore: add production API URL"
-git push origin main
-```
-
-Vercel will auto-redeploy.
+**How to Handle Secrets:**
+1. Set environment variables in Render/Vercel dashboards
+2. Use `.gitignore` to exclude `.env` files
+3. Use "Generate" button in Render for JWT secrets
+4. Rotate keys periodically
 
 ---
 
