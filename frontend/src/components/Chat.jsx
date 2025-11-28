@@ -19,6 +19,8 @@ export default function Chat({ token, user, onLogout }) {
   const [chatSessions, setChatSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 768);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState(null);
   const messagesEndRef = useRef(null);
   const profileMenuRef = useRef(null);
 
@@ -30,9 +32,25 @@ export default function Chat({ token, user, onLogout }) {
 
   // Fetch user documents and chat sessions on mount
   useEffect(() => {
-    fetchDocuments();
-    fetchUserProfile();
-    fetchChatSessions();
+    const loadInitialData = async () => {
+      setIsLoadingData(true);
+      setDataLoadError(null);
+      
+      try {
+        // Load all data in parallel with Promise.allSettled to continue even if some fail
+        await Promise.allSettled([
+          fetchDocuments(),
+          fetchUserProfile(),
+          fetchChatSessions(),
+        ]);
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+    
+    loadInitialData();
   }, []);
 
   // Close profile menu when clicking outside
@@ -55,14 +73,25 @@ export default function Chat({ token, user, onLogout }) {
   const fetchUserProfile = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await axios.get(`${API_URL}/api/v1/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       setUserProfile(response.data);
     } catch (err) {
-      console.error("Failed to fetch user profile:", err);
+      if (err.name === 'AbortError' || err.code === 'ECONNABORTED') {
+        console.error("Timeout fetching user profile");
+        setDataLoadError("Request timed out. Please check your connection.");
+      } else {
+        console.error("Failed to fetch user profile:", err);
+        setDataLoadError("Failed to load profile data");
+      }
     }
   };
 
@@ -73,17 +102,29 @@ export default function Chat({ token, user, onLogout }) {
   const fetchDocuments = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await axios.get(
         `${API_URL}/api/v1/documents/list`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          signal: controller.signal,
         }
       );
+      clearTimeout(timeoutId);
       setDocuments(response.data.documents || []);
     } catch (error) {
-      console.error("Failed to fetch documents:", error);
+      if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
+        console.error("Timeout fetching documents");
+        setDataLoadError("Request timed out. Please check your connection.");
+      } else {
+        console.error("Failed to fetch documents:", error);
+        // Don't set error for documents - they might just not have any
+        setDocuments([]);
+      }
     }
   };
 
@@ -121,17 +162,29 @@ export default function Chat({ token, user, onLogout }) {
   const fetchChatSessions = async () => {
     try {
       const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await axios.get(
         `${API_URL}/api/v1/chat/sessions`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          signal: controller.signal,
         }
       );
+      clearTimeout(timeoutId);
       setChatSessions(response.data.sessions || []);
     } catch (error) {
-      console.error("Failed to fetch chat sessions:", error);
+      if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
+        console.error("Timeout fetching chat sessions");
+        setDataLoadError("Request timed out. Please check your connection.");
+      } else {
+        console.error("Failed to fetch chat sessions:", error);
+        // Don't set error for sessions - they might just not have any
+        setChatSessions([]);
+      }
     }
   };
 
@@ -308,6 +361,37 @@ export default function Chat({ token, user, onLogout }) {
 
   return (
     <div className="flex h-screen bg-linear-to-br from-gray-50 via-blue-50 to-indigo-50">
+      {/* Loading Overlay */}
+      {isLoadingData && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-4">
+            <svg
+              className="animate-spin h-12 w-12 text-indigo-600"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            <p className="text-gray-700 font-medium">Loading your data...</p>
+            {dataLoadError && (
+              <p className="text-red-600 text-sm text-center max-w-xs">{dataLoadError}</p>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Mobile Backdrop */}
       {showSidebar && (
         <div
@@ -633,7 +717,21 @@ export default function Chat({ token, user, onLogout }) {
         {/* Document Manager Modal */}
         {showDocManager && (
           <DocumentManager
-            onClose={() => setShowDocManager(false)}
+            onClose={async () => {
+              setShowDocManager(false);
+              // Refetch all data after closing document manager
+              setIsLoadingData(true);
+              setDataLoadError(null);
+              try {
+                await Promise.allSettled([
+                  fetchDocuments(),
+                  fetchUserProfile(),
+                  fetchChatSessions(),
+                ]);
+              } finally {
+                setIsLoadingData(false);
+              }
+            }}
             onDocumentsChange={(docs) => setDocuments(docs)}
           />
         )}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 
-function DocumentManager({ onClose }) {
+function DocumentManager({ onClose, onDocumentsChange }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -27,7 +27,12 @@ function DocumentManager({ onClose }) {
         },
       });
 
-      setDocuments(response.data.documents || []);
+      const docs = response.data.documents || [];
+      setDocuments(docs);
+      // Notify parent component about document changes
+      if (onDocumentsChange) {
+        onDocumentsChange(docs);
+      }
     } catch (err) {
       console.error("Failed to fetch documents:", err);
       setError("Failed to load documents");
