@@ -28,19 +28,30 @@ async def stream_sse_response(
     try:
         logger.info(f"Processing query for user {user_id}: {query[:100]}...")
 
-        # Build filter dict for document-specific queries
-        filter_dict = None
-        if doc_id:
-            filter_dict = {"doc_id": doc_id}
-            logger.info(f"Filtering query to document: {doc_id}")
+        # Build filter dict - ALWAYS filter by user_id for privacy/security
+        filter_dict = {"user_id": user_id}
 
-        # Retrieve more chunks with enhanced LLM-powered search
-        # Double the initial retrieval
-        top_k = min(settings.TOP_K_CHUNKS * 2, 30)
+        # Add document filter if specified (narrows down to specific doc)
+        if doc_id:
+            filter_dict["doc_id"] = doc_id
+            logger.info(
+                f"Filtering query to user {user_id}, document: {doc_id}")
+        else:
+            logger.info(f"Filtering query to user {user_id}'s documents only")
+
+        # Debug: Log the exact filter being used
+        logger.info(
+            f"ChromaDB filter: {filter_dict} (user_id type: {type(user_id).__name__})")
+
+        # Retrieve significantly more chunks with enhanced LLM-powered search
+        # Cast a wider net for better recall, then aggressively rerank
+        initial_retrieve = 50  # Retrieve many candidates
+        top_k = min(settings.TOP_K_CHUNKS * 3, 20)  # Return more for context
+
         results = ChromaDB.search_with_reranking(
             query_text=query,
             n_results=top_k,
-            retrieve_count=40,  # Cast wider net for better coverage
+            retrieve_count=initial_retrieve,  # Cast very wide net
             use_llm_expansion=True,  # Enable LLM-powered query understanding
             filter_dict=filter_dict  # Apply document filter if specified
         )
@@ -55,11 +66,13 @@ async def stream_sse_response(
                 'text': results['documents'][0][i],
                 'doc_id': results['metadatas'][0][i].get('doc_id', 'unknown'),
                 'chunk_id': results['metadatas'][0][i].get('chunk_id', 'unknown'),
-                'distance': results['distances'][0][i] if 'distances' in results else 0.0
+                'distance': results['distances'][0][i] if 'distances' in results else 0.0,
+                'filename': results['metadatas'][0][i].get('filename', 'unknown')
             }
             retrieved_chunks.append(chunk)
 
-        rerank_top_k = settings.RERANK_TOP_K
+        # Use more chunks for better context (top 7-8 instead of 5)
+        rerank_top_k = min(settings.RERANK_TOP_K + 2, len(retrieved_chunks))
         final_chunks = retrieved_chunks[:rerank_top_k]
 
         logger.info(f"Retrieved {len(final_chunks)} chunks for context")

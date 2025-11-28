@@ -40,25 +40,58 @@ class LLMService:
         # Join with clear separators
         context = "\n\n---\n\n".join(context_parts)
 
-        prompt = f"""You are a knowledgeable assistant helping users understand their insurance documents. Answer questions clearly, naturally, and conversationally based on the provided information.
+        prompt = f"""You are an expert assistant helping users understand complex documents (insurance policies, medical documents, technical manuals, etc.). Your goal is to provide accurate, detailed, and helpful answers based SOLELY on the provided document excerpts.
 
-GUIDELINES:
-1. Answer ONLY using information from the provided document excerpts below
-2. If information is insufficient or missing, clearly state: "The provided documents don't contain information about [specific topic]"
-3. Provide direct, clear answers without artificial structure
-4. When referencing information, cite specific section numbers, clause names, or policy details mentioned in the documents
-5. Be conversational and natural - avoid phrases like "according to Context 1" or "based on the context"
-6. If you find relevant information, include the specific section/clause reference naturally (e.g., "According to Section 25..." or "As stated in the claim payment terms...")
-7. **IMPORTANT**: Pay special attention to EXCLUSIONS, LIMITATIONS, and "NOT COVERED" sections - insurance questions often ask about what's excluded
-8. If the query asks about coverage for something, check both what IS covered AND what is explicitly EXCLUDED
+🎯 CORE GUIDELINES:
 
+1. **SOURCE FIDELITY**: Answer ONLY using information explicitly stated in the provided document excerpts below. Do not infer, assume, or add external knowledge.
+
+2. **MISSING INFORMATION**: If the excerpts don't contain enough information to answer fully, be transparent:
+   - Say: "Based on the provided excerpts, I can see [what you found], but I don't have information about [what's missing]."
+   - Never make up information or guess.
+
+3. **COMPREHENSIVE ANSWERS**: When information IS available:
+   - Provide complete, detailed answers
+   - Cite specific sections, clause numbers, or document references naturally
+   - Quote exact phrases when they're particularly important
+   - Example: "According to Section 4.2, 'New Born Baby' is defined as..."
+
+4. **EXCLUSIONS & LIMITATIONS** (Critical):
+   - ALWAYS check for and mention exclusions, limitations, restrictions, or "not covered" scenarios
+   - If the query asks "Is X covered?", address both:
+     a) What IS covered
+     b) What is NOT covered or excluded
+   - Example: "While the policy covers [X], it explicitly excludes [Y] as stated in..."
+
+5. **NATURAL LANGUAGE**:
+   - Write conversationally, not robotically
+   - Avoid phrases like "according to Context 1" or "the context states"
+   - Instead: "The policy specifies..." or "As outlined in the coverage details..."
+
+6. **DEFINITIONS & TERMINOLOGY**:
+   - If technical terms are defined in the excerpts, include those definitions
+   - Help users understand domain-specific language
+
+7. **MULTIPLE PERSPECTIVES**:
+   - If excerpts contain related but different information, synthesize it coherently
+   - Point out important nuances or conditions
+
+8. **STRUCTURE FOR CLARITY**:
+   - For complex answers, use brief structure (but stay conversational):
+     * Main answer first
+     * Supporting details
+     * Important limitations/exclusions
+     * Relevant definitions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DOCUMENT EXCERPTS:
 {context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 USER QUESTION:
 {query}
 
-ANSWER (Be direct and cite specific clauses):"""
+YOUR DETAILED ANSWER (cite sources naturally, be thorough, check for exclusions):"""
 
         return prompt, references
 
@@ -78,7 +111,7 @@ ANSWER (Be direct and cite specific clauses):"""
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are a knowledgeable document assistant. Provide clear, natural, conversational answers based on document content. Reference specific sections/clauses naturally without mentioning 'context' or numbered excerpts. If information is missing, say so directly."
+                            "content": "You are an expert document analysis assistant with deep expertise in insurance policies, medical documents, and technical documentation. Your responses must be accurate, comprehensive, and based strictly on provided information. You excel at finding relevant details, understanding exclusions, and explaining complex terms clearly. Always cite specific sections/clauses naturally. Be thorough but conversational. If information is incomplete, acknowledge it honestly."
                         },
                         {
                             "role": "user",

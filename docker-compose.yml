@@ -1,0 +1,108 @@
+services:
+  # MongoDB Service
+  mongodb:
+    image: mongo:8.0
+    container_name: documind-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    environment:
+      MONGO_INITDB_DATABASE: documind_ai
+    networks:
+      - documind-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: documind-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./chroma_db:/app/chroma_db
+      - ./logs:/app/logs
+    environment:
+      # MongoDB Configuration
+      MONGODB_URL: mongodb://mongodb:27017
+      MONGODB_DB_NAME: documind_ai
+
+      # Groq API Configuration
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: llama-3.3-70b-versatile
+
+      # JWT Configuration
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 10080
+
+      # ChromaDB Configuration
+      CHROMA_PERSIST_DIR: /app/chroma_db
+
+      # SentenceTransformer Configuration
+      EMBEDDING_MODEL: multi-qa-mpnet-base-dot-v1
+      EMBEDDING_DEVICE: cpu
+
+      # Server Configuration
+      HOST: 0.0.0.0
+      PORT: 8000
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+
+      # File Upload Configuration
+      UPLOAD_DIR: /app/uploads
+      MAX_FILE_SIZE: 52428800
+
+      # Rate Limiting
+      RATE_LIMIT_PER_MINUTE: 10
+      RATE_LIMIT_PER_HOUR: 100
+
+      # Chunking Configuration
+      MIN_CHUNK_SIZE: 300
+      MAX_CHUNK_SIZE: 1200
+      CHUNK_OVERLAP: 100
+
+      # Retrieval Configuration
+      TOP_K_CHUNKS: 5
+      RERANK_TOP_K: 7
+
+      # Advanced retrieval settings
+      ENABLE_LLM_EXPANSION: "true"
+      RETRIEVAL_CANDIDATES: 50
+      MAX_CHUNKS_PER_DOC: 3
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - documind-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import requests; requests.get('http://localhost:8000/api/v1/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  documind-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local

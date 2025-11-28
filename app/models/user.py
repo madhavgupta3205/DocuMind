@@ -39,3 +39,15 @@ class TokenData(BaseModel):
     """Schema for token payload data."""
     email: Optional[str] = None
     user_id: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    """Schema for changing password."""
+    current_password: str
+    new_password: str = Field(..., min_length=6)
+
+
+class ProfileUpdate(BaseModel):
+    """Schema for updating user profile."""
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None

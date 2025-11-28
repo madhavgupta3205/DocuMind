@@ -66,7 +66,14 @@ def chunk_text(
     overlap: int = 100
 ) -> List[str]:
     """
-    Split text into overlapping chunks for better context retrieval.
+    Split text into overlapping chunks with semantic awareness for better context retrieval.
+
+    Enhanced strategy:
+    - Respects paragraph boundaries
+    - Maintains semantic coherence
+    - Ensures minimum chunk size for context
+    - Adds smart overlap to preserve continuity
+    - Handles section headers and special formatting
 
     Args:
         text: Input text to chunk
@@ -75,45 +82,93 @@ def chunk_text(
         overlap: Overlap between chunks in characters
 
     Returns:
-        List of text chunks
+        List of text chunks with preserved context
     """
-    # Split by paragraphs first
+    # Clean and normalize text
+    text = text.strip()
+
+    # Split by double newlines (paragraphs) but preserve single newlines
     paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+
+    # If no paragraph breaks, try single newlines
+    if len(paragraphs) == 1:
+        paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
 
     chunks = []
     current_chunk = ""
+    current_size = 0
 
     for para in paragraphs:
-        # If adding this paragraph exceeds max_size, save current chunk
-        if len(current_chunk) + len(para) > max_size and len(current_chunk) >= min_size:
+        para_size = len(para)
+
+        # Check if this paragraph is a section header (short, possibly numbered/titled)
+        is_header = (para_size < 100 and
+                     (para.isupper() or
+                      any(para.startswith(prefix) for prefix in ['Section', 'Chapter', 'Article', 'SECTION', 'CHAPTER']) or
+                      (para[0].isdigit() and '.' in para[:5])))
+
+        # If adding this paragraph would exceed max_size
+        if current_size + para_size > max_size and current_size >= min_size:
+            # Save current chunk
             chunks.append(current_chunk.strip())
-            # Start new chunk with overlap
-            current_chunk = current_chunk[-overlap:] + " " + para
+
+            # Start new chunk with smart overlap
+            # If previous chunk ends with header, include it in new chunk
+            overlap_text = current_chunk[-overlap:
+                                         ] if not is_header else current_chunk[-overlap*2:]
+            current_chunk = overlap_text + "\n\n" + para
+            current_size = len(current_chunk)
         else:
-            current_chunk += " " + para if current_chunk else para
+            # Add to current chunk
+            if current_chunk:
+                current_chunk += "\n\n" + para
+            else:
+                current_chunk = para
+            current_size = len(current_chunk)
 
     # Add the last chunk
-    if current_chunk.strip():
+    if current_chunk.strip() and len(current_chunk.strip()) >= min_size // 2:
         chunks.append(current_chunk.strip())
 
-    # Handle case where chunks are still too large
+    # Handle chunks that are still too large - split by sentences
     final_chunks = []
     for chunk in chunks:
         if len(chunk) <= max_size:
             final_chunks.append(chunk)
         else:
-            # Split large chunks by sentences
-            sentences = chunk.split('. ')
+            # Split by sentences (multiple patterns for better accuracy)
+            import re
+            # Split on period followed by space and capital, or period at end
+            sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', chunk)
+
             temp_chunk = ""
             for sentence in sentences:
-                if len(temp_chunk) + len(sentence) <= max_size:
-                    temp_chunk += sentence + ". "
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+
+                # If adding this sentence exceeds max, save current
+                if len(temp_chunk) + len(sentence) + 2 > max_size and len(temp_chunk) >= min_size:
+                    final_chunks.append(temp_chunk.strip())
+                    # Start new with overlap
+                    last_sentences = temp_chunk.split(
+                        '. ')[-2:] if '. ' in temp_chunk else []
+                    temp_chunk = '. '.join(
+                        last_sentences) + ". " + sentence if last_sentences else sentence
                 else:
-                    if temp_chunk:
-                        final_chunks.append(temp_chunk.strip())
-                    temp_chunk = sentence + ". "
-            if temp_chunk:
+                    temp_chunk += " " + sentence if temp_chunk else sentence
+
+            # Add remaining
+            if temp_chunk.strip() and len(temp_chunk.strip()) >= min_size // 2:
                 final_chunks.append(temp_chunk.strip())
 
-    logger.info(f"Created {len(final_chunks)} chunks from text")
+    # Remove any chunks that are too short (likely artifacts)
+    final_chunks = [c for c in final_chunks if len(c.strip()) >= min_size // 2]
+
+    # Ensure we have at least one chunk
+    if not final_chunks and text:
+        final_chunks = [text[:max_size]]
+
+    logger.info(
+        f"Created {len(final_chunks)} semantic chunks from text (avg size: {sum(len(c) for c in final_chunks) // max(len(final_chunks), 1)} chars)")
     return final_chunks

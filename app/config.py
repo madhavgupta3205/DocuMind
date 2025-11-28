@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    ALLOWED_ORIGINS: str = "*"  # Configure in .env for production
 
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE: int = 52428800
@@ -34,7 +34,12 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 100
 
     TOP_K_CHUNKS: int = 5
-    RERANK_TOP_K: int = 5
+    RERANK_TOP_K: int = 7  # Increased for better context
+
+    # Advanced retrieval settings
+    ENABLE_LLM_EXPANSION: bool = True  # Use LLM for query understanding
+    RETRIEVAL_CANDIDATES: int = 50  # Initial candidates to retrieve
+    MAX_CHUNKS_PER_DOC: int = 3  # Max chunks from same document (diversity)
 
     @property
     def origins_list(self) -> List[str]:

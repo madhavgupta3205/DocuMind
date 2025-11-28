@@ -1,0 +1,34 @@
+services:
+  backend:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "1"
+          memory: 2G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    environment:
+      # Override with production values
+      ALLOWED_ORIGINS: https://yourdomain.com
+      RATE_LIMIT_PER_MINUTE: 30
+      RATE_LIMIT_PER_HOUR: 500
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+
+  mongodb:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+    command: mongod --wiredTigerCacheSizeGB 1.5 --auth
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}

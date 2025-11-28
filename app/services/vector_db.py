@@ -31,27 +31,66 @@ def tokenize(s: str) -> List[str]:
 
 
 def calculate_lexical_score(query: str, text: str) -> float:
-    """A lightweight lexical similarity score.
+    """Advanced lexical similarity with BM25-inspired scoring.
 
-    Combines token overlap (Jaccard-like) and difflib sequence ratio.
+    Combines:
+    - Token overlap (Jaccard similarity)
+    - BM25-like term frequency weighting
+    - Phrase/bigram matching
+    - Sequence similarity
     Returns 0..1 float.
     """
-    q_tokens = set(tokenize(query))
-    t_tokens = set(tokenize(text))
+    q_tokens = tokenize(query)
+    t_tokens = tokenize(text)
+    q_token_set = set(q_tokens)
+    t_token_set = set(t_tokens)
 
-    if not q_tokens or not t_tokens:
+    if not q_token_set or not t_token_set:
         return 0.0
 
-    # token overlap
-    intersection = q_tokens.intersection(t_tokens)
-    token_score = len(intersection) / max(len(q_tokens), 1)
+    # 1. Basic token overlap (Jaccard)
+    intersection = q_token_set.intersection(t_token_set)
+    jaccard = len(intersection) / max(len(q_token_set.union(t_token_set)), 1)
 
-    # fuzzy sequence similarity on the raw normalized strings
+    # 2. BM25-inspired term frequency scoring
+    # Penalize very common terms, boost rare exact matches
+    tf_scores = []
+    for q_term in q_tokens:
+        if q_term in t_tokens:
+            tf = t_tokens.count(q_term)
+            # BM25-like saturation: tf / (tf + k1)
+            k1 = 1.5
+            tf_score = (tf * (k1 + 1)) / (tf + k1)
+            tf_scores.append(tf_score)
+
+    avg_tf_score = sum(tf_scores) / max(len(q_tokens), 1) if tf_scores else 0.0
+
+    # 3. Phrase/bigram matching (important for multi-word terms)
+    bigram_score = 0.0
+    if len(q_tokens) >= 2:
+        q_bigrams = set(zip(q_tokens[:-1], q_tokens[1:]))
+        t_bigrams = set(zip(t_tokens[:-1], t_tokens[1:]))
+        if q_bigrams and t_bigrams:
+            bigram_matches = len(q_bigrams.intersection(t_bigrams))
+            bigram_score = bigram_matches / len(q_bigrams)
+
+    # 4. Fuzzy sequence similarity (catches minor variations)
     seq_ratio = difflib.SequenceMatcher(
         None, normalize_text(query), normalize_text(text)).ratio()
 
-    # weighted combine, favoring token overlap
-    return 0.7 * token_score + 0.3 * seq_ratio
+    # 5. Query coverage (what % of query terms found)
+    query_coverage = len(intersection) / max(len(q_token_set), 1)
+
+    # Weighted combination favoring exact matches and phrases
+    combined = (
+        0.25 * jaccard +           # Overall similarity
+        0.25 * avg_tf_score +      # Term frequency importance
+        0.20 * bigram_score +      # Phrase matching
+        0.15 * query_coverage +    # Query term coverage
+        0.15 * seq_ratio           # Fuzzy matching
+    )
+
+    return min(combined, 1.0)
 
 
 def generate_query_variants(query: str) -> List[str]:
@@ -109,61 +148,103 @@ def generate_query_variants(query: str) -> List[str]:
 def llm_expand_query(query: str) -> Dict[str, Any]:
     """
     Use LLM to intelligently expand the query with:
-    1. Semantic variations
-    2. Key concepts to search for
+    1. Semantic variations with domain synonyms
+    2. Key concepts and technical terms
     3. Potential exclusions/negations to check
-    4. Hypothetical answer snippet (HyDE technique)
+    4. Multiple hypothetical answers (HyDE technique)
+    5. Question type classification
 
     This dramatically improves retrieval accuracy by understanding user intent.
     """
     try:
         client = Groq(api_key=settings.GROQ_API_KEY)
 
-        expansion_prompt = f"""You are a search query analyzer for an insurance document RAG system. Analyze this user query and help improve document retrieval.
+        expansion_prompt = f"""You are an expert search query analyzer for document RAG systems, specializing in insurance, medical, and technical documents.
 
 USER QUERY: "{query}"
 
-Provide a JSON response with:
-1. "semantic_variants": 3-5 rephrased versions capturing the same intent
-2. "key_concepts": Important keywords/phrases to search for
-3. "exclusion_terms": Related terms about what's NOT covered (exclusions, limitations)
-4. "hypothetical_answer": A 2-sentence example of what a relevant document passage might say
+Analyze this query deeply and provide a JSON response with:
 
-Focus on insurance terminology, coverage/exclusions, and policy language.
+1. "query_type": Classify as "definition", "coverage", "exclusion", "process", "eligibility", "comparison", or "general"
 
-Respond ONLY with valid JSON:"""
+2. "semantic_variants": 5-7 high-quality rephrased versions that:
+   - Use domain-specific terminology and synonyms
+   - Include formal and informal variations
+   - Cover different ways to ask the same question
+   - Include related questions a user might actually ask
+
+3. "key_concepts": List 8-12 critical keywords/phrases including:
+   - Technical terms
+   - Domain-specific vocabulary
+   - Synonyms and abbreviations
+   - Related concepts
+
+4. "exclusion_terms": Terms related to limitations, restrictions, what's NOT covered:
+   - "not covered", "excluded", "limitation", "restriction"
+   - "does not apply", "not eligible", "not included"
+   - Specific exclusion scenarios
+
+5. "hypothetical_answers": Array of 2-3 example passages (2-3 sentences each) that would directly answer this query, written in formal document language
+
+6. "context_hints": List of 4-6 section titles or document parts where this information would likely be found
+   - E.g., "Coverage Details", "Exclusions", "Definitions", "Claims Process", etc.
+
+Focus on insurance/medical terminology, coverage language, and policy structure.
+
+IMPORTANT: Return ONLY valid JSON, no markdown or explanation:"""
 
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a search optimization expert for insurance documents. Always respond with valid JSON only."
+                    "content": "You are an expert search optimization specialist for document retrieval systems. You understand insurance, medical, and legal terminology deeply. Always return valid JSON only, no markdown formatting."
                 },
                 {
                     "role": "user",
                     "content": expansion_prompt
                 }
             ],
-            temperature=0.3,
-            max_tokens=500,
+            temperature=0.2,  # Lower temperature for more focused results
+            max_tokens=800,  # More tokens for comprehensive expansion
             response_format={"type": "json_object"}
         )
 
         import json
         expansion = json.loads(response.choices[0].message.content)
         logger.info(
-            f"LLM query expansion: {len(expansion.get('semantic_variants', []))} variants generated")
+            f"LLM query expansion: type={expansion.get('query_type')}, "
+            f"{len(expansion.get('semantic_variants', []))} variants, "
+            f"{len(expansion.get('key_concepts', []))} concepts")
         return expansion
 
     except Exception as e:
         logger.warning(f"LLM query expansion failed, using fallback: {e}")
-        # Fallback to basic expansion
+        # Enhanced fallback with basic domain synonyms
+        domain_synonyms = {
+            "baby": ["newborn", "infant", "neonate", "new born baby"],
+            "child": ["minor", "dependent", "kid", "pediatric"],
+            "coverage": ["benefit", "protection", "insurance", "policy coverage"],
+            "excluded": ["not covered", "limitation", "restriction", "does not apply"],
+            "treatment": ["medical care", "procedure", "therapy", "medical service"],
+            "accident": ["accidental injury", "bodily injury", "external injury"],
+            "claim": ["reimbursement", "payment request", "insurance claim"],
+            "pre-existing": ["prior condition", "existing condition", "previous illness"]
+        }
+
+        expanded_terms = tokenize(query)
+        query_lower = query.lower()
+        for term, synonyms in domain_synonyms.items():
+            if term in query_lower:
+                expanded_terms.extend(synonyms)
+
         return {
+            "query_type": "general",
             "semantic_variants": [query],
-            "key_concepts": tokenize(query),
-            "exclusion_terms": [],
-            "hypothetical_answer": ""
+            "key_concepts": expanded_terms[:12],
+            "exclusion_terms": ["not covered", "excluded", "limitation"],
+            "hypothetical_answers": [query],
+            "context_hints": ["Coverage", "Benefits", "Exclusions"]
         }
 
 
@@ -372,66 +453,167 @@ class ChromaDB:
             if not all_candidates:
                 return initial_results
 
-            # Step 3: Advanced hybrid scoring
+            # Step 3: Advanced multi-signal hybrid scoring
             key_concepts = set(expansion.get('key_concepts', []))
             exclusion_terms = set(expansion.get('exclusion_terms', []))
+            context_hints = [h.lower()
+                             for h in expansion.get('context_hints', [])]
+            query_type = expansion.get('query_type', 'general')
+            hypothetical_answers = expansion.get('hypothetical_answers', [])
 
             scored_results = []
             for chunk_id, candidate in all_candidates.items():
                 doc = candidate['document']
+                metadata = candidate['metadata']
                 distance = candidate['distance']
 
                 # 1. Semantic similarity score (from embedding distance)
-                semantic_score = 1.0 - distance
+                semantic_score = 1.0 - min(distance, 1.0)
 
-                # 2. Lexical matching with query + variants
-                variants = [query_text] + generate_query_variants(query_text)
+                # 2. Enhanced lexical matching with query + variants + hypotheticals
+                all_variants = [query_text] + \
+                    expansion.get('semantic_variants', [])[:4]
                 lexical_scores = [calculate_lexical_score(
-                    v, doc) for v in variants]
+                    v, doc) for v in all_variants]
                 keyword_score = max(lexical_scores) if lexical_scores else 0.0
 
-                # 3. Key concept coverage bonus
+                # 3. Hypothetical answer similarity (HyDE)
+                hyde_score = 0.0
+                if hypothetical_answers:
+                    hyde_scores = [calculate_lexical_score(
+                        hyp, doc) for hyp in hypothetical_answers[:2]]
+                    hyde_score = max(hyde_scores) if hyde_scores else 0.0
+
+                # 4. Key concept coverage with weighted importance
                 doc_tokens = set(tokenize(doc))
                 concept_matches = key_concepts.intersection(doc_tokens)
+                # Weight by how early concepts appear in query (earlier = more important)
                 concept_score = len(
                     concept_matches) / max(len(key_concepts), 1) if key_concepts else 0.0
 
-                # 4. Exclusion term bonus (insurance documents often describe exclusions)
+                # 5. Exclusion term detection (critical for insurance queries)
                 exclusion_matches = exclusion_terms.intersection(doc_tokens)
                 exclusion_score = len(
                     exclusion_matches) / max(len(exclusion_terms), 1) if exclusion_terms else 0.0
+                # Boost if query is about exclusions
+                if query_type == 'exclusion' or 'not covered' in query_text.lower() or 'excluded' in query_text.lower():
+                    exclusion_score *= 2.0
 
-                # 5. Multi-query match bonus (found by multiple search strategies)
+                # 6. Context hint matching (section titles, headers)
+                context_score = 0.0
+                if context_hints:
+                    chunk_text_lower = doc.lower()
+                    matching_hints = sum(
+                        1 for hint in context_hints if hint in chunk_text_lower)
+                    context_score = matching_hints / max(len(context_hints), 1)
+
+                # 7. Multi-query match confidence
                 multi_match_bonus = min(
-                    len(candidate['query_matches']) * 0.05, 0.15)
+                    len(candidate['query_matches']) * 0.05, 0.2)
 
-                # Combined scoring with weights
-                combined_score = (
-                    0.45 * semantic_score +      # Embedding similarity
-                    0.20 * keyword_score +        # Lexical overlap
-                    0.15 * concept_score +        # Key concept coverage
-                    0.10 * exclusion_score +      # Exclusion term presence
-                    0.10 * multi_match_bonus      # Multi-strategy confidence
-                )
+                # 8. Document length penalty (very short chunks might be incomplete)
+                # Normalize to 500 chars
+                length_score = min(len(doc) / 500.0, 1.0)
+
+                # 9. Metadata relevance (e.g., filename matching query terms)
+                metadata_score = 0.0
+                filename = metadata.get('filename', '').lower()
+                if any(term in filename for term in tokenize(query_text)[:3]):
+                    metadata_score = 0.5
+
+                # Adaptive weighted combination based on query type
+                if query_type == 'definition':
+                    # For definitions, prioritize semantic + concept coverage
+                    combined_score = (
+                        0.40 * semantic_score +
+                        0.25 * concept_score +
+                        0.15 * keyword_score +
+                        0.10 * hyde_score +
+                        0.05 * context_score +
+                        0.05 * multi_match_bonus
+                    )
+                elif query_type == 'exclusion':
+                    # For exclusions, heavily weight exclusion terms
+                    combined_score = (
+                        0.30 * semantic_score +
+                        0.30 * exclusion_score +
+                        0.20 * keyword_score +
+                        0.10 * context_score +
+                        0.10 * multi_match_bonus
+                    )
+                elif query_type == 'coverage':
+                    # For coverage, balance semantic + lexical + concepts
+                    combined_score = (
+                        0.35 * semantic_score +
+                        0.25 * keyword_score +
+                        0.15 * concept_score +
+                        0.10 * hyde_score +
+                        0.10 * context_score +
+                        0.05 * multi_match_bonus
+                    )
+                else:
+                    # General balanced scoring
+                    combined_score = (
+                        0.35 * semantic_score +
+                        0.20 * keyword_score +
+                        0.15 * concept_score +
+                        0.10 * hyde_score +
+                        0.08 * exclusion_score +
+                        0.07 * context_score +
+                        0.03 * length_score +
+                        0.02 * metadata_score
+                    )
+
+                # Add multi-match bonus universally
+                combined_score += multi_match_bonus * 0.1
 
                 scored_results.append({
-                    'score': combined_score,
+                    'score': min(combined_score, 1.0),
                     'document': doc,
                     'metadata': candidate['metadata'],
                     'id': chunk_id,
                     'distance': distance,
                     'debug': {
-                        'semantic': semantic_score,
-                        'lexical': keyword_score,
-                        'concepts': concept_score,
-                        'exclusions': exclusion_score,
-                        'multi_match': multi_match_bonus
+                        'semantic': round(semantic_score, 3),
+                        'lexical': round(keyword_score, 3),
+                        'hyde': round(hyde_score, 3),
+                        'concepts': round(concept_score, 3),
+                        'exclusions': round(exclusion_score, 3),
+                        'context': round(context_score, 3),
+                        'multi_match': round(multi_match_bonus, 3),
+                        'length': round(length_score, 3),
+                        'metadata': round(metadata_score, 3)
                     }
                 })
 
-            # Step 4: Sort and return top results
+            # Step 4: Sort and apply diversity-aware reranking
             scored_results.sort(key=lambda x: x['score'], reverse=True)
-            top_results = scored_results[:n_results]
+
+            # Ensure chunk diversity (avoid too many similar chunks from same document)
+            diverse_results = []
+            doc_chunk_count = {}
+            max_per_doc = max(2, n_results // 3)  # Max 2-3 chunks per document
+
+            for result in scored_results:
+                doc_id = result['metadata'].get('doc_id', 'unknown')
+                count = doc_chunk_count.get(doc_id, 0)
+
+                if count < max_per_doc:
+                    diverse_results.append(result)
+                    doc_chunk_count[doc_id] = count + 1
+
+                if len(diverse_results) >= n_results:
+                    break
+
+            # If diversity filtering was too aggressive, add more from top scores
+            if len(diverse_results) < n_results:
+                for result in scored_results:
+                    if result not in diverse_results:
+                        diverse_results.append(result)
+                        if len(diverse_results) >= n_results:
+                            break
+
+            top_results = diverse_results[:n_results]
 
             reranked = {
                 'documents': [[r['document'] for r in top_results]],
@@ -440,10 +622,19 @@ class ChromaDB:
                 'distances': [[r['distance'] for r in top_results]]
             }
 
-            logger.info(
-                f"Enhanced retrieval: {len(all_candidates)} candidates → top {n_results} "
-                f"(concepts: {len(key_concepts)}, exclusions: {len(exclusion_terms)})"
-            )
+            # Log detailed scoring breakdown for top result
+            if top_results:
+                top = top_results[0]
+                logger.info(
+                    f"Enhanced retrieval: {len(all_candidates)} candidates → {len(top_results)} diverse results\n"
+                    f"Query type: {query_type} | Top score: {top['score']:.3f}\n"
+                    f"Score breakdown: sem={top['debug']['semantic']:.3f}, "
+                    f"lex={top['debug']['lexical']:.3f}, hyde={top['debug']['hyde']:.3f}, "
+                    f"concept={top['debug']['concepts']:.3f}, excl={top['debug']['exclusions']:.3f}, "
+                    f"ctx={top['debug']['context']:.3f}\n"
+                    f"Concepts found: {len(key_concepts)}, Exclusion terms: {len(exclusion_terms)}, "
+                    f"Context hints: {len(context_hints)}"
+                )
             return reranked
 
         except Exception as e:

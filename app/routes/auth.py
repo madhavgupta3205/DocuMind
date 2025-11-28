@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import timedelta
 from loguru import logger
 
-from app.models.user import UserCreate, UserLogin, Token, UserResponse
+from app.models.user import UserCreate, UserLogin, Token, UserResponse, PasswordChange, ProfileUpdate
 from app.services.database import UserDB
 from app.utils.auth import get_password_hash, verify_password, create_access_token
 from app.config import settings
@@ -128,4 +128,117 @@ async def get_current_user_info(current_user: TokenData = Depends(get_current_us
         "full_name": db_user.get("full_name"),
         "created_at": db_user["created_at"],
         "is_active": db_user["is_active"]
+    }
+
+
+@router.post("/change-password")
+async def change_password(
+    password_data: PasswordChange,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """
+    Change user password.
+
+    Args:
+        password_data: Current and new password
+        current_user: Current authenticated user
+
+    Returns:
+        Success message
+
+    Raises:
+        HTTPException: If current password is incorrect
+    """
+    db_user = await UserDB.get_user_by_id(current_user.user_id)
+
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Verify current password
+    if not verify_password(password_data.current_password, db_user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect"
+        )
+
+    # Hash and update new password
+    new_hashed_password = get_password_hash(password_data.new_password)
+    success = await UserDB.update_password(current_user.user_id, new_hashed_password)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update password"
+        )
+
+    logger.info(f"Password changed for user: {current_user.email}")
+
+    return {
+        "success": True,
+        "message": "Password updated successfully"
+    }
+
+
+@router.put("/profile", response_model=UserResponse)
+async def update_profile(
+    profile_data: ProfileUpdate,
+    current_user: TokenData = Depends(get_current_user)
+):
+    """
+    Update user profile information.
+
+    Args:
+        profile_data: Profile update data
+        current_user: Current authenticated user
+
+    Returns:
+        Updated user information
+
+    Raises:
+        HTTPException: If email already exists or update fails
+    """
+    # Check if email is being changed and if it's already taken
+    if profile_data.email and profile_data.email != current_user.email:
+        existing_user = await UserDB.get_user_by_email(profile_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already in use"
+            )
+
+    # Update profile
+    update_data = {}
+    if profile_data.full_name is not None:
+        update_data["full_name"] = profile_data.full_name
+    if profile_data.email is not None:
+        update_data["email"] = profile_data.email
+
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No data provided for update"
+        )
+
+    success = await UserDB.update_profile(current_user.user_id, update_data)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update profile"
+        )
+
+    # Fetch updated user
+    updated_user = await UserDB.get_user_by_id(current_user.user_id)
+
+    logger.info(f"Profile updated for user: {current_user.email}")
+
+    return {
+        "id": updated_user["_id"],
+        "email": updated_user["email"],
+        "full_name": updated_user.get("full_name"),
+        "created_at": updated_user["created_at"],
+        "is_active": updated_user["is_active"]
     }

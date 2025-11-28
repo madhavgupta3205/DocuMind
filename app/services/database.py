@@ -80,6 +80,36 @@ class UserDB:
         except Exception:
             return None
 
+    @staticmethod
+    async def update_password(user_id: str, hashed_password: str) -> bool:
+        """Update user password."""
+        collection = MongoDB.get_collection("users")
+
+        try:
+            result = await collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {"hashed_password": hashed_password}}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"Failed to update password: {e}")
+            return False
+
+    @staticmethod
+    async def update_profile(user_id: str, update_data: Dict[str, Any]) -> bool:
+        """Update user profile information."""
+        collection = MongoDB.get_collection("users")
+
+        try:
+            result = await collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": update_data}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"Failed to update profile: {e}")
+            return False
+
 
 class ChatDB:
 
