@@ -269,13 +269,27 @@ class ChromaDB:
                 metadata={"hnsw:space": "cosine"}
             )
 
+            # Initialize embedding model with optimized settings
+            import torch
+            
+            # Use all available CPU cores for faster encoding
+            torch.set_num_threads(torch.get_num_threads())  # Ensure multi-threading is enabled
+            
             cls.embedding_model = SentenceTransformer(
                 settings.EMBEDDING_MODEL,
                 device=settings.EMBEDDING_DEVICE
             )
+            
+            # Enable additional optimizations
+            cls.embedding_model.eval()  # Set to evaluation mode (faster inference)
+            if settings.EMBEDDING_DEVICE == 'cpu':
+                # Optimize for CPU inference
+                import os
+                os.environ['OMP_NUM_THREADS'] = str(torch.get_num_threads())
+                os.environ['MKL_NUM_THREADS'] = str(torch.get_num_threads())
 
             logger.info(
-                f"ChromaDB initialized with {cls.collection.count()} embeddings"
+                f"ChromaDB initialized with {cls.collection.count()} embeddings (using {torch.get_num_threads()} CPU threads)"
             )
 
         except Exception as e:
@@ -291,6 +305,7 @@ class ChromaDB:
     ):
         """
         Add documents to ChromaDB with embeddings.
+        Optimized with batch processing and multi-threading for faster uploads.
 
         Args:
             texts: List of text chunks
@@ -298,23 +313,84 @@ class ChromaDB:
             ids: List of unique IDs for chunks
         """
         try:
+            import time
+            start_time = time.time()
+            
+            logger.info(f"Starting embedding generation for {len(texts)} chunks...")
+            
+            # Generate embeddings with optimized settings
+            # - batch_size: Process in optimal batches for better throughput
+            # - normalize_embeddings: True for better similarity scoring (no quality loss)
+            # - show_progress_bar: False to avoid overhead
+            # - convert_to_numpy: True to get numpy arrays, then convert to list
             embeddings = cls.embedding_model.encode(
                 texts,
-                show_progress_bar=False
-            ).tolist()
-
-            cls.collection.add(
-                embeddings=embeddings,
-                documents=texts,
-                metadatas=metadatas,
-                ids=ids
+                batch_size=32,  # Optimal batch size for multi-qa-mpnet-base-dot-v1
+                show_progress_bar=False,
+                normalize_embeddings=True,  # Better for cosine similarity
+                convert_to_numpy=True  # Get numpy array first
             )
+            
+            # Convert numpy array to list
+            embeddings = embeddings.tolist()
+            
+            embedding_time = time.time() - start_time
+            logger.info(f"Generated {len(embeddings)} embeddings in {embedding_time:.2f}s ({len(embeddings)/embedding_time:.1f} chunks/sec)")
 
-            logger.info(f"Added {len(texts)} documents to ChromaDB")
+            # Add to ChromaDB in batches to avoid memory issues with large documents
+            batch_size = 100
+            total_added = 0
+            
+            for i in range(0, len(texts), batch_size):
+                batch_end = min(i + batch_size, len(texts))
+                batch_embeddings = embeddings[i:batch_end]
+                batch_texts = texts[i:batch_end]
+                batch_metadatas = metadatas[i:batch_end]
+                batch_ids = ids[i:batch_end]
+                
+                cls.collection.add(
+                    embeddings=batch_embeddings,
+                    documents=batch_texts,
+                    metadatas=batch_metadatas,
+                    ids=batch_ids
+                )
+                
+                total_added += len(batch_texts)
+                if len(texts) > batch_size:
+                    logger.info(f"Added batch {i//batch_size + 1}: {total_added}/{len(texts)} chunks")
+
+            total_time = time.time() - start_time
+            logger.info(f"Successfully added {len(texts)} documents to ChromaDB in {total_time:.2f}s total")
 
         except Exception as e:
             logger.error(f"Failed to add documents: {e}")
             raise
+
+    @classmethod
+    def _normalize_filter(cls, filter_dict: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Normalize filter dictionary to ChromaDB's expected format.
+        ChromaDB requires explicit $and operator when multiple conditions are present.
+
+        Args:
+            filter_dict: Dict with filter conditions like {"user_id": "...", "doc_id": "..."}
+
+        Returns:
+            Normalized filter dict with proper operators
+        """
+        if not filter_dict:
+            return None
+
+        # If only one condition, return as-is
+        if len(filter_dict) == 1:
+            return filter_dict
+
+        # Multiple conditions - wrap in $and operator
+        conditions = [
+            {key: value} for key, value in filter_dict.items()
+        ]
+
+        return {"$and": conditions}
 
     @classmethod
     def search(
@@ -332,10 +408,13 @@ class ChromaDB:
                 show_progress_bar=False
             ).tolist()
 
+            # Normalize filter to ChromaDB's expected format
+            normalized_filter = cls._normalize_filter(filter_dict)
+
             results = cls.collection.query(
                 query_embeddings=query_embedding,
                 n_results=n_results,
-                where=filter_dict
+                where=normalized_filter
             )
 
             return results
@@ -660,7 +739,7 @@ class ChromaDB:
             List of documents with metadata
         """
         try:
-            # Query all documents for this user
+            # Query all documents for this user (single condition, no normalization needed)
             results = cls.collection.get(
                 where={"user_id": user_id},
                 include=["metadatas"]

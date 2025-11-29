@@ -46,6 +46,9 @@ async def upload_document(
         HTTPException: If file processing fails
     """
     try:
+        import time
+        upload_start = time.time()
+        
         # Validate file size
         contents = await file.read()
         if len(contents) > settings.MAX_FILE_SIZE:
@@ -65,9 +68,11 @@ async def upload_document(
         with open(file_path, "wb") as f:
             f.write(contents)
 
-        logger.info(f"File saved: {file_path}")
+        save_time = time.time() - upload_start
+        logger.info(f"File saved: {file_path} ({save_time:.2f}s)")
 
         # Process document
+        process_start = time.time()
         text = process_document(file_path)
 
         if not text or len(text.strip()) < 100:
@@ -75,18 +80,24 @@ async def upload_document(
                 status_code=400,
                 detail="Document contains insufficient text content"
             )
+        
+        process_time = time.time() - process_start
+        logger.info(f"Document text extracted: {len(text)} chars in {process_time:.2f}s")
 
         # Chunk text
+        chunk_start = time.time()
         chunks = chunk_text(
             text,
             min_size=settings.MIN_CHUNK_SIZE,
             max_size=settings.MAX_CHUNK_SIZE,
             overlap=settings.CHUNK_OVERLAP
         )
-
-        logger.info(f"Generated {len(chunks)} chunks from document")
+        
+        chunk_time = time.time() - chunk_start
+        logger.info(f"Generated {len(chunks)} chunks in {chunk_time:.2f}s")
 
         # Prepare for ChromaDB
+        metadata_start = time.time()
         chunk_ids = []
         chunk_texts = []
         metadatas = []
@@ -103,15 +114,25 @@ async def upload_document(
                 "upload_date": datetime.utcnow().isoformat(),
                 "chunk_index": i
             })
+        
+        metadata_time = time.time() - metadata_start
+        logger.info(f"Prepared metadata in {metadata_time:.2f}s")
 
-        # Add to ChromaDB
+        # Add to ChromaDB (this is the slowest part - embedding generation)
+        embedding_start = time.time()
         ChromaDB.add_documents(
             texts=chunk_texts,
             metadatas=metadatas,
             ids=chunk_ids
         )
+        embedding_time = time.time() - embedding_start
 
-        logger.info(f"Document processed successfully: {doc_id}")
+        total_time = time.time() - upload_start
+        logger.info(
+            f"Document processed successfully: {doc_id} | "
+            f"Total: {total_time:.2f}s (save: {save_time:.2f}s, extract: {process_time:.2f}s, "
+            f"chunk: {chunk_time:.2f}s, embed: {embedding_time:.2f}s)"
+        )
 
         return {
             "success": True,
